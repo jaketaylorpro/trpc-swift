@@ -103,6 +103,9 @@ const zodUnionToSwiftType = (
                     optionTypeSignature += "?";
                 }
 
+                if (state.flags.publicAccess) {
+                    swiftModel += "public ";
+                }
                 swiftModel += `var ${optionFieldSignature}: ${optionTypeSignature}\n`;
             }
         });
@@ -149,10 +152,14 @@ const zodObjectToSwiftType = (schema: AnyZodObject, state: TRPCSwiftModelState, 
                     swiftModel += `/// ${childDescription}\n`;
                 }
 
+                if (state.flags.publicAccess) {
+                    swiftModel += "public ";
+                }
                 swiftModel += `var ${key}: ${childType.swiftTypeSignature}\n`;
 
                 if (state.flags.publicAccess) {
-                    publicInitArgs.push(`${key}: ${childType.swiftTypeSignature}`);
+                    const isArgOptional = childType.swiftTypeSignature.endsWith("?");
+                    publicInitArgs.push(`${key}: ${childType.swiftTypeSignature}${isArgOptional ? " = nil" : ""}`);
                 }
             }
         });
@@ -198,7 +205,7 @@ const zodEnumToSwiftType = (
                 swiftModel += "public ";
             }
 
-            swiftModel = `enum ${name}: String, Codable, ${state.flags.conformance} {\n`;
+            swiftModel += `enum ${name}: String, Codable, ${state.flags.conformance} {\n`;
             schema._def.values.forEach((value) => {
                 swiftModel += `case ${processFieldName(value)} = "${value}"\n`;
             });
