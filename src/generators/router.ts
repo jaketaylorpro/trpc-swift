@@ -102,13 +102,23 @@ export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure
 
     return swiftClass;
 };
-
+function normalize(def:any):any & {type:"mutation"|"query"|"subscription",query:boolean,mutation:boolean,subscription:boolean}{
+    const type = def.type;
+    return {
+        type:def.query?"query":def.mutation?"mutation":"subscription",
+        query: type == "query",
+        mutation: type == "mutation",
+        subscription: type == "subscription",
+        ...def};
+}
 const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: GenericProcedure, state: TRPCSwiftRouteState): string => {
     try {
+        const def = normalize(procedure._def);
+        console.log(`working on procedure: ${name} ${JSON.stringify(def)}`);
         let swiftLocalModels = "";
         let swiftMethod = "";
 
-        const description = procedure._def.meta?.swift?.description;
+        const description = def.meta?.swift?.description;
         if (description) {
             swiftMethod += `/// ${description}\n`;
         }
@@ -119,11 +129,11 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
 
         swiftMethod += `func ${name}(`;
 
-        if (procedure._def.inputs.length > 1) {
+        if (def.inputs.length > 1) {
             throw new Error("Multiple inputs not supported.");
         }
 
-        const input = procedure._def.inputs.at(0);
+        const input = def.inputs.at(0);
         let addedInput = false;
         if (input) {
             const schemaType = zodSchemaToSwiftType(
@@ -154,8 +164,8 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
 
         const emptyOutputType = "TRPCClient.EmptyObject";
         let outputType = emptyOutputType;
-        if (procedure._def.output) {
-            const output = procedure._def.output;
+        if (def.output) {
+            const output = def.output;
             const schemaType = zodSchemaToSwiftType(
                 output as ZodType,
                 {
@@ -185,13 +195,13 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
         }
 
         const pathMethod = state.routeDepth === 0 ? "appendingPathComponent" : "appendingPathExtension";
-        if (procedure._def.query) {
+        if (def.query) {
             swiftMethod += `${
                 hasOutput ? "return" : "let _: TRPCClient.EmptyObject ="
             } try await TRPCClient.shared.sendQuery(url: url.${pathMethod}("${name}"), middlewares: middlewares, input: ${
                 addedInput ? "input" : "TRPCClient.EmptyObject()"
             })\n`;
-        } else if (procedure._def.mutation) {
+        } else if (def.mutation) {
             swiftMethod += `${
                 hasOutput ? "return" : "let _: TRPCClient.EmptyObject ="
             } try await TRPCClient.shared.sendMutation(url: url.${pathMethod}("${name}"), middlewares: middlewares, input: ${
