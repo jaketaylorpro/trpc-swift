@@ -42,6 +42,7 @@ export const zodSchemaToSwiftType = (schema: ZodType, state: TRPCSwiftModelState
             case ZodFirstPartyTypeKind.ZodEffects:
                 return zodEffectsToSwiftType(schema as ZodEffects<never>, state, fallbackName);
             case ZodFirstPartyTypeKind.ZodVoid:
+            case ZodFirstPartyTypeKind.ZodNull:
             case ZodFirstPartyTypeKind.ZodUndefined:
                 return null;
             case ZodFirstPartyTypeKind.ZodBigInt:
@@ -55,7 +56,15 @@ export const zodSchemaToSwiftType = (schema: ZodType, state: TRPCSwiftModelState
             case ZodFirstPartyTypeKind.ZodString:
                 return { swiftTypeSignature: "String" };
             case ZodFirstPartyTypeKind.ZodLiteral:
-                return zodEnumToSwiftType(z.enum((schema as ZodLiteral<never>)._def.value), state, fallbackName);
+                switch (typeof (schema as ZodLiteral<any>).value) {
+                    case "boolean":
+                        return { swiftTypeSignature: "Bool"};
+                    case "string":
+                        return { swiftTypeSignature: "String"};
+                    default:
+                        return zodEnumToSwiftType(z.enum((schema as ZodLiteral<never>)._def.value), state, fallbackName);
+                }
+
             default:
                 break;
         }

@@ -74,9 +74,13 @@ struct TRPCRequest<T: Encodable>: Encodable {
     }
 }
 
-struct TRPCResponse<T: Decodable>: Decodable {
+public struct TRPCResponse<T: Decodable>: Decodable {
     struct Result: Decodable {
-        let data: T
+        struct DataContainer: Decodable {
+            let json: T
+        }
+
+        let data: DataContainer
     }
     
     struct ErrorContainer: Decodable {
@@ -88,6 +92,27 @@ struct TRPCResponse<T: Decodable>: Decodable {
 }
 
 public typealias TRPCMiddleware = (URLRequest) async throws -> URLRequest
+
+public protocol TRPCDecoder {
+    func decode<Response>(_ type: Response.Type, response:(Data,URLResponse)) async throws -> TRPCResponse<Response> where Response : Decodable
+}
+public class DefaultTRPCDecoder: TRPCDecoder {
+
+    lazy var dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+
+        return formatter
+    }()
+    public func decode<Response>(_ type: Response.Type, response:(Data,URLResponse)) async throws -> TRPCResponse<Response> where Response : Decodable {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .formatted(dateFormatter)
+        return try decoder.decode([TRPCResponse<Response>].self, from: response.0)[0]
+    }
+}
+let defaultTRPCDecoder = DefaultTRPCDecoder()
 
 class TRPCClient {
     struct EmptyObject: Codable {}
@@ -103,7 +128,7 @@ class TRPCClient {
         return formatter
     }()
     
-    func sendQuery<Request: Encodable, Response: Decodable>(url: URL, middlewares: [TRPCMiddleware], input: Request) async throws -> Response {
+    func sendQuery<Request: Encodable, Response: Decodable>(url: URL, middlewares: [TRPCMiddleware], decoder: TRPCDecoder, input: Request) async throws -> Response {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw TRPCError(code: .errorParsingUrl, message: "Could not create URLComponents from the given url: \(url)")
         }
@@ -127,10 +152,10 @@ class TRPCClient {
             throw TRPCError(code: .errorParsingUrlComponents, message: "Could not generate final URL after including parameters.")
         }
         
-        return try await send(url: url, httpMethod: "GET", middlewares: middlewares, bodyData: nil)
+        return try await send(url: url, httpMethod: "GET", middlewares: middlewares, decoder: decoder, bodyData: nil)
     }
 
-    func sendMutation<Request: Encodable, Response: Decodable>(url: URL, middlewares: [TRPCMiddleware], input: Request) async throws -> Response {
+    func sendMutation<Request: Encodable, Response: Decodable>(url: URL, middlewares: [TRPCMiddleware], decoder: TRPCDecoder, input: Request) async throws -> Response {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
 
         let encoder = JSONEncoder()
@@ -145,10 +170,10 @@ class TRPCClient {
             throw NSError(domain: "", code: -1, userInfo: nil)
         }
 
-        return try await send(url: url, httpMethod: "POST", middlewares: middlewares, bodyData: data)
+        return try await send(url: url, httpMethod: "POST", middlewares: middlewares, decoder: decoder, bodyData: data)
     }
 
-    private func send<Response: Decodable>(url: URL, httpMethod: String, middlewares: [TRPCMiddleware], bodyData: Data?) async throws -> Response {
+    private func send<Response: Decodable>(url: URL, httpMethod: String, middlewares: [TRPCMiddleware], decoder: TRPCDecoder, bodyData: Data?) async throws -> Response {
         var request = URLRequest(url: url)
         request.httpMethod = httpMethod
         request.httpBody = bodyData
@@ -163,9 +188,7 @@ class TRPCClient {
 
         let response = try await URLSession.shared.data(for: request)
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .formatted(dateFormatter)
-        let decoded = try decoder.decode([TRPCResponse<Response>].self, from: response.0)[0]
+        let decoded = try await decoder.decode(Response.self, response: response)
 
         if let error = decoded.error {
             throw error.json
@@ -190,5 +213,6 @@ class TRPCClient {
 private protocol TRPCClientData: AnyObject {
     var url: URL { get }
     var middlewares: [TRPCMiddleware] { get }
+    var decoder: TRPCDecoder { get }
 }
 

@@ -62,17 +62,22 @@ export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure
         }
         swiftClass += `private var baseUrl: URL${state.flags.createShared ? "!" : ""}\n`;
         swiftClass += "private var baseMiddlewares: [TRPCMiddleware] = []\n\n";
+        swiftClass += "private var baseDecoder:TRPCDecoder = defaultTRPCDecoder\n\n";
         swiftClass += "fileprivate var url: URL {\n";
         swiftClass += "baseUrl\n";
         swiftClass += "}\n\n";
         swiftClass += "fileprivate var middlewares: [TRPCMiddleware] {\n";
         swiftClass += "baseMiddlewares\n";
         swiftClass += "}\n\n";
+        swiftClass += "fileprivate var decoder: TRPCDecoder {\n";
+        swiftClass += "baseDecoder\n";
+        swiftClass += "}\n\n";
         swiftClass += `${state.flags.publicAccess ? "public " : ""}init(baseUrl: URL${
             state.flags.createShared ? "? = nil" : ""
-        }, middlewares: [TRPCMiddleware] = []) {\n`;
+        }, middlewares: [TRPCMiddleware] = [], decoder: TRPCDecoder = defaultTRPCDecoder) {\n`;
         swiftClass += "self.baseUrl = baseUrl\n";
         swiftClass += "self.baseMiddlewares = middlewares\n";
+        swiftClass += "self.baseDecoder = decoder\n";
         swiftClass += "}\n";
     } else {
         swiftClass += "fileprivate let clientData: TRPCClientData\n\n";
@@ -85,6 +90,9 @@ export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure
         swiftClass += "}\n\n";
         swiftClass += "fileprivate var middlewares: [TRPCMiddleware] {\n";
         swiftClass += "clientData.middlewares\n";
+        swiftClass += "}\n\n";
+        swiftClass += "fileprivate var decoder: TRPCDecoder {\n";
+        swiftClass += "clientData.decoder\n";
         swiftClass += "}\n\n";
         swiftClass += "fileprivate init(clientData: TRPCClientData) {\n";
         swiftClass += "self.clientData = clientData\n";
@@ -198,13 +206,13 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
         if (def.query) {
             swiftMethod += `${
                 hasOutput ? "return" : "let _: TRPCClient.EmptyObject ="
-            } try await TRPCClient.shared.sendQuery(url: url.${pathMethod}("${name}"), middlewares: middlewares, input: ${
+            } try await TRPCClient.shared.sendQuery(url: url.${pathMethod}("${name}"), middlewares: middlewares, decoder: decoder, input: ${
                 addedInput ? "input" : "TRPCClient.EmptyObject()"
             })\n`;
         } else if (def.mutation) {
             swiftMethod += `${
                 hasOutput ? "return" : "let _: TRPCClient.EmptyObject ="
-            } try await TRPCClient.shared.sendMutation(url: url.${pathMethod}("${name}"), middlewares: middlewares, input: ${
+            } try await TRPCClient.shared.sendMutation(url: url.${pathMethod}("${name}"), middlewares: middlewares, decoder: decoder, input: ${
                 addedInput ? "input" : "TRPCClient.EmptyObject()"
             })\n`;
         } else {
