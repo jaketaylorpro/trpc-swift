@@ -195,7 +195,7 @@ class TRPCClient {
         }
 
         if let result = decoded.result {
-            return result.data
+            return result.data.json
         }
 
         if Response.self == EmptyObject.self {
