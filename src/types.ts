@@ -10,6 +10,7 @@ export type TRPCSwiftFlags = {
     publicAccess: boolean;
     conformance: string;
     globalMode: "all" | "top" | "none";
+    match: RegExp;
     quiet: boolean;
 };
 
@@ -44,13 +45,13 @@ export type SwiftTypeGenerationData = {
 };
 
 export type TRPCSwiftRouteState = {
-    routeDepth: number;
+    routePath: Array<string>;
     globalModels: SwiftModelGenerationData;
     visibleModelNames: Set<string>;
     flags: TRPCSwiftFlags;
 };
 
 export type TRPCSwiftModelState = TRPCSwiftRouteState & {
-    modelDepth: number;
+    modelPath: Array<string>;
     isAlreadyOptional: boolean;
 };

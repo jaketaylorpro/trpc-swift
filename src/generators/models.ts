@@ -1,5 +1,6 @@
 import {
     AnyZodObject,
+    z,
     ZodArray,
     ZodEffects,
     ZodEnum,
@@ -13,14 +14,12 @@ import {
     ZodType,
     ZodTypeAny,
     ZodUnion,
-    z,
 } from "zod";
 import { SwiftTypeGenerationData, TRPCSwiftModelState } from "../types.js";
 import { processFieldName, processTypeName } from "../utility.js";
 import { extendZodWithSwift } from "../extensions/zod.js";
 
 extendZodWithSwift(z);
-
 export const zodSchemaToSwiftType = (schema: ZodType, state: TRPCSwiftModelState, fallbackName: string): SwiftTypeGenerationData | null => {
     if ("typeName" in schema._def) {
         switch (schema._def.typeName as ZodFirstPartyTypeKind) {
@@ -69,8 +68,7 @@ export const zodSchemaToSwiftType = (schema: ZodType, state: TRPCSwiftModelState
                 break;
         }
     }
-
-    throw new Error("Unsupported schema type: " + (schema._def as { typeName: ZodFirstPartyTypeKind }).typeName);
+    throw new Error(`Unsupported schema type (${state.routePath.join('.')}:${state.modelPath.join('.')}) ${(schema._def as { typeName: ZodFirstPartyTypeKind }).typeName}: ${JSON.stringify(schema)}`);
 };
 
 const zodUnionToSwiftType = (
@@ -141,11 +139,12 @@ const zodObjectToSwiftType = (schema: AnyZodObject, state: TRPCSwiftModelState, 
 
         swiftModel += `struct ${name}: Codable, ${state.flags.conformance} {\n`;
         Object.entries(schema.shape).forEach(([key, value]) => {
+            const modelPath = [...state.modelPath,key];
             const childType = zodSchemaToSwiftType(
                 value as ZodType,
                 {
                     ...state,
-                    modelDepth: state.modelDepth + 1,
+                    modelPath,
                     visibleModelNames: new Set(state.visibleModelNames),
                     isAlreadyOptional: false,
                 },
@@ -190,11 +189,12 @@ const zodEnumToSwiftType = (
     state: TRPCSwiftModelState,
     fallbackName: string
 ): SwiftTypeGenerationData | null => {
+    const modelPath = [...state.modelPath,fallbackName];
     return wrapZodSchemaWithModels(
         schema,
         {
             ...state,
-            modelDepth: state.modelDepth + 1,
+            modelPath,
             visibleModelNames: new Set(state.visibleModelNames),
             isAlreadyOptional: false,
         },
@@ -230,11 +230,12 @@ const zodOptionalOrNullableToSwiftType = (
     state: TRPCSwiftModelState,
     fallbackName: string
 ): SwiftTypeGenerationData | null => {
+    const modelPath = [...state.modelPath,fallbackName];
     const unwrappedResult = zodSchemaToSwiftType(
         schema._def.innerType,
         {
             ...state,
-            modelDepth: state.modelDepth + 1,
+            modelPath,
             isAlreadyOptional: true,
         },
         fallbackName
@@ -304,7 +305,7 @@ const wrapZodSchemaWithModels = (
     const zodSwiftName = schema._def.swift?.name;
     const shouldBeGlobal =
         schema._def.swift?.name &&
-        (schema._def.swift.global || state.flags.globalMode === "all" || (state.flags.globalMode === "top" && state.modelDepth === 0));
+        (schema._def.swift.global || state.flags.globalMode === "all" || (state.flags.globalMode === "top" && state.modelPath.length === 0));
     const finalName = zodSwiftName ?? fallbackName;
 
     if (state.visibleModelNames.has(finalName) || state.globalModels.names.has(finalName)) {

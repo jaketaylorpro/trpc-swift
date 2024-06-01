@@ -18,7 +18,7 @@ export const trpcRouterToSwiftClient = (name: string, routerDef: SwiftTRPCRouter
         names: new Set<string>(),
     };
     const swiftClass = trpcStructureToSwiftClass(name, trpcStructure, {
-        routeDepth: 0,
+        routePath: [],
         globalModels,
         visibleModelNames: new Set<string>(),
         flags,

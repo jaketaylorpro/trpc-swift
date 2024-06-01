@@ -1,4 +1,4 @@
-import { GenericProcedure, SwiftTRPCRouterDef, TRPCStructure, TRPCSwiftRouteState } from "../types.js";
+import { GenericProcedure, SwiftTRPCRouterDef, TRPCStructure, TRPCSwiftFlags, TRPCSwiftRouteState } from "../types.js";
 import { ZodType, z } from "zod";
 import { processFieldName, processTypeName } from "../utility.js";
 import { zodSchemaToSwiftType } from "./models.js";
@@ -25,23 +25,30 @@ export const getTRPCStructure = (routerDef: SwiftTRPCRouterDef): TRPCStructure =
 };
 
 export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure, state: TRPCSwiftRouteState): string => {
-    const className = processTypeName(name) + (state.routeDepth ? "Route" : "");
+    const className = processTypeName(name) + (state.routePath.length ? "Route" : "");
     let swiftClass = `${state.flags.publicAccess ? "public " : ""}class ${className}: TRPCClientData {\n`;
 
     let innerSwiftCode = "";
     const childStructureNames: string[] = [];
 
     Object.entries(structure).forEach(([key, value]) => {
-        if (isProcedure(value)) {
-            innerSwiftCode += trpcProcedureToSwiftMethodAndLocalModels(key, value, state);
-        } else {
-            innerSwiftCode += trpcStructureToSwiftClass(key, value, {
-                ...state,
-                routeDepth: state.routeDepth + 1,
-                visibleModelNames: new Set(state.visibleModelNames),
-            });
-            childStructureNames.push(key);
+        const routePath = [...state.routePath,key];
+        if(state.flags.match.test(routePath.join('.'))) {
+            if (isProcedure(value)) {
+                innerSwiftCode += trpcProcedureToSwiftMethodAndLocalModels(key, value, {...state,routePath});
+            } else {
+                innerSwiftCode += trpcStructureToSwiftClass(key, value, {
+                    ...state,
+                    routePath,
+                    visibleModelNames: new Set(state.visibleModelNames),
+                });
+                childStructureNames.push(key);
+            }
         }
+        // else {
+        //     console.log(`skipping: ${routePath.join('.')}`);
+        // }
+
     });
 
     childStructureNames.forEach((child) => {
@@ -56,7 +63,7 @@ export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure
         swiftClass += "\n";
     }
 
-    if (state.routeDepth === 0) {
+    if (state.routePath.length === 0) {
         if (state.flags.createShared) {
             swiftClass += `${state.flags.publicAccess ? "public " : ""}static let shared = ${className}()\n\n`;
         }
@@ -82,7 +89,7 @@ export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure
     } else {
         swiftClass += "fileprivate let clientData: TRPCClientData\n\n";
         swiftClass += "fileprivate var url: URL {\n";
-        if (state.routeDepth === 1) {
+        if (state.routePath.length === 1) {
             swiftClass += `clientData.url.appendingPathComponent("${name}")\n`;
         } else {
             swiftClass += `clientData.url.appendingPathExtension("${name}")\n`;
@@ -101,7 +108,7 @@ export const trpcStructureToSwiftClass = (name: string, structure: TRPCStructure
 
     swiftClass += "\n";
 
-    if (state.routeDepth === 0 && state.globalModels.swiftCode) {
+    if (state.routePath.length === 0 && state.globalModels.swiftCode) {
         swiftClass += state.globalModels.swiftCode + "\n";
     }
 
@@ -122,7 +129,8 @@ function normalize(def:any):any & {type:"mutation"|"query"|"subscription",query:
 const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: GenericProcedure, state: TRPCSwiftRouteState): string => {
     try {
         const def = normalize(procedure._def);
-        console.log(`working on procedure: ${name} ${JSON.stringify(def)}`);
+        console.log(`generating procedure: ${state.routePath.join('.')}`);
+        // console.log(JSON.stringify(def,null,2));
         let swiftLocalModels = "";
         let swiftMethod = "";
 
@@ -148,7 +156,7 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
                 input as ZodType,
                 {
                     ...state,
-                    modelDepth: 0,
+                    modelPath: [],
                     isAlreadyOptional: false,
                 },
                 processTypeName(name + "InputType")
@@ -178,7 +186,7 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
                 output as ZodType,
                 {
                     ...state,
-                    modelDepth: 0,
+                    modelPath: [],
                     isAlreadyOptional: false,
                 },
                 processTypeName(name + "OutputType")
@@ -202,7 +210,7 @@ const trpcProcedureToSwiftMethodAndLocalModels = (name: string, procedure: Gener
             swiftMethod += " {\n";
         }
 
-        const pathMethod = state.routeDepth === 0 ? "appendingPathComponent" : "appendingPathExtension";
+        const pathMethod = state.routePath.length === 0 ? "appendingPathComponent" : "appendingPathExtension";
         if (def.query) {
             swiftMethod += `${
                 hasOutput ? "return" : "let _: TRPCClient.EmptyObject ="

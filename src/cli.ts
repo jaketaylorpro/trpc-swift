@@ -24,6 +24,7 @@ const showHelp = () => {
     console.log("  -p, --public       Assign the public access modifier for all generated Swift models and routes.");
     console.log("  -a, --alias        Create public type aliases for all models in the global scope.");
     console.log("  -s, --shared       Create a shared singleton instance of the generated Swift client.");
+    console.log("  -m, --match        A regular expression to match routes that should be generated, defaults to .* to match all.");
     console.log("  -h, --help         Display this help message");
     console.log("  -q, --quiet        Run in quiet mode (no output except for fatal errors)");
 };
@@ -39,6 +40,7 @@ const flags: TRPCSwiftFlags = {
     publicAccess: false,
     globalMode: "top",
     conformance: "Equatable",
+    match: /.*/,
     quiet: false,
 };
 
@@ -106,6 +108,11 @@ for (let i = 0; i < args.length; i++) {
         case "--shared":
         case "-s":
             flags.createShared = true;
+            break;
+        case "--match":
+        case "-m":
+            flags.match = RegExp(value!);
+            i++;
             break;
         case "--public":
         case "-p":
