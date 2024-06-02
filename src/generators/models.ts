@@ -18,6 +18,7 @@ import {
 import { SwiftTypeGenerationData, TRPCSwiftModelState } from "../types.js";
 import { processFieldName, processTypeName } from "../utility.js";
 import { extendZodWithSwift } from "../extensions/zod.js";
+import { type } from "node:os";
 
 extendZodWithSwift(z);
 export const zodSchemaToSwiftType = (schema: ZodType, state: TRPCSwiftModelState, fallbackName: string): SwiftTypeGenerationData | null => {
@@ -127,6 +128,8 @@ const zodObjectToSwiftType = (schema: AnyZodObject, state: TRPCSwiftModelState, 
         let swiftModel = "";
 
         const description = schema._def.swift?.description;
+        const id = schema._def.swift?.id;
+
         if (description) {
             swiftModel += `/// ${description}\n`;
         }
@@ -137,7 +140,20 @@ const zodObjectToSwiftType = (schema: AnyZodObject, state: TRPCSwiftModelState, 
             swiftModel += "public ";
         }
 
-        swiftModel += `struct ${name}: Codable, ${state.flags.conformance} {\n`;
+        swiftModel += `struct ${name}: Codable, ${id?"Identifiable, ":""}${state.flags.conformance} {\n`;
+        if(id) {
+            const typeName = schema.shape[id]?._def.typeName;
+            // console.log(`swift.id found: ${id} ${typeName} ${Object.keys(schema.shape)} ${JSON.stringify(schema.shape[id])}`);
+            let idType:string|undefined;
+            if(typeName == "ZodString") {
+                idType = "String";
+            } else if (typeName == "ZodBigInt") {
+                idType = "Int";
+            } else {
+                throw Error(`Unsupported id field ${id} type: ${typeName}`);
+            }
+            swiftModel += `\tvar id:${idType} { ${schema._def.swift?.id} }\n`;
+        }
         Object.entries(schema.shape).forEach(([key, value]) => {
             const modelPath = [...state.modelPath,key];
             const childType = zodSchemaToSwiftType(

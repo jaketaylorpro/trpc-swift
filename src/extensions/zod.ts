@@ -4,6 +4,7 @@ type ZodSwiftMetadata = {
     name?: string;
     description?: string;
     global?: boolean;
+    id?: string;
 };
 
 declare module "zod" {
@@ -21,6 +22,8 @@ export const extendZodWithSwift = (zod: typeof z) => {
         this._def.swift = {
             name: metadata.name ?? this._def.swift?.name,
             description: metadata.description,
+            id: metadata.id,
+            global: metadata.global
         };
         return this;
     };
